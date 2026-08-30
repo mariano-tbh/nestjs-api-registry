@@ -1,7 +1,7 @@
 import { Global, Injectable, Module } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { describe, expect, it } from "vitest";
-import { ApiClient } from "core/api-client.js";
+import { ApiClient } from "../core/api-client.js";
 import { Api, createApiInjectionToken } from "./api.decorator.js";
 import { ApiRegistryModule } from "./api-registry.module.js";
 

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { RuntimeException } from "@nestjs/core/internal";
 import { Inject } from "@nestjs/common";
-import { ApiClient } from "core/api-client.js";
+import { ApiClient } from "../core/api-client.js";
 
 const __uuid = randomUUID();
 

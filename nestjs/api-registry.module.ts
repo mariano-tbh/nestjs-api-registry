@@ -6,7 +6,7 @@ import {
   type ModuleMetadata,
   type Provider,
 } from "@nestjs/common";
-import { ApiClient, ApiClientOptions } from "core/api-client.js";
+import { ApiClient, ApiClientOptions } from "../core/api-client.js";
 import { ApiName, __apis } from "./api.decorator.js";
 
 const moduleDef = new ConfigurableModuleBuilder<{

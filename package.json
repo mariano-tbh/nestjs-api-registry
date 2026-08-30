@@ -1,36 +1,72 @@
 {
   "name": "nestjs-api-registry",
-  "version": "1.0.0",
-  "description": "",
-  "keywords": [],
-  "license": "ISC",
+  "version": "0.1.0-alpha.0",
+  "description": "Configurable NestJS module for registering and injecting named axios-based API clients.",
+  "keywords": [
+    "api-client",
+    "axios",
+    "dynamic-module",
+    "http-client",
+    "nestjs"
+  ],
+  "homepage": "https://github.com/mariano-tbh/nestjs-api-registry#readme",
+  "bugs": {
+    "url": "https://github.com/mariano-tbh/nestjs-api-registry/issues"
+  },
+  "license": "Apache-2.0",
   "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mariano-tbh/nestjs-api-registry.git"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "prepublishOnly": "npm run lint && npm run format:check && npm test && npm run build"
   },
   "dependencies": {
-    "@nestjs/axios": "^12.0.0",
-    "@nestjs/common": "^12.0.1",
-    "@nestjs/core": "^12.0.1",
     "axios": "^1.20.0",
-    "axios-retry": "^4.5.0",
-    "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2",
-    "typescript": "^7.0.2"
+    "axios-retry": "^4.5.0"
   },
   "devDependencies": {
+    "@nestjs/common": "^12.0.1",
+    "@nestjs/core": "^12.0.1",
     "@nestjs/testing": "^12.0.1",
     "@swc/core": "^1.16.1",
     "@types/node": "^26.4.0",
     "oxfmt": "^0.65.0",
     "oxlint": "^1.80.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typescript": "^7.0.2",
     "unplugin-swc": "^1.5.11",
     "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^12.0.0",
+    "@nestjs/core": "^12.0.0",
+    "reflect-metadata": "^0.2.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
