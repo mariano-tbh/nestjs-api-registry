@@ -1,6 +1,6 @@
 {
   "name": "nestjs-api-registry",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.1",
   "description": "Configurable NestJS module for registering and injecting named axios-based API clients.",
   "keywords": [
     "api-client",
