@@ -4,7 +4,6 @@
 
 test/
 .github/
-.swcrc
 .oxlintrc.json
 .oxfmtrc.json
 tsconfig.json
