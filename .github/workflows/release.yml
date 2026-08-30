@@ -21,6 +21,10 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
 
+      # Trusted publishing (OIDC) requires npm >= 11.5.1; the version bundled
+      # with actions/setup-node's node-version above may be older.
+      - run: npm install -g npm@latest
+
       - run: npm ci
 
       - name: Verify tag matches package.json version
@@ -47,7 +51,7 @@ jobs:
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
 
+      # Authenticates via OIDC trusted publishing (configured on npmjs.com for
+      # this repo + workflow) — no NPM_TOKEN secret involved.
       - name: Publish to npm
         run: npm publish --tag ${{ steps.dist-tag.outputs.tag }} --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
