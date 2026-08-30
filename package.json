@@ -14,7 +14,7 @@
     "url": "https://github.com/mariano-tbh/nestjs-api-registry/issues"
   },
   "license": "Apache-2.0",
-  "author": "",
+  "author": "mariano-tbh",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mariano-tbh/nestjs-api-registry.git"
