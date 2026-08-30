@@ -1,3 +1,17 @@
+# Compiled output (colocated with sources so subpath exports resolve directly)
+/index.js
+/index.js.map
+/index.d.ts
+/index.d.ts.map
+core/**/*.js
+core/**/*.js.map
+core/**/*.d.ts
+core/**/*.d.ts.map
+nestjs/**/*.js
+nestjs/**/*.js.map
+nestjs/**/*.d.ts
+nestjs/**/*.d.ts.map
+
 # Logs
 logs
 *.log

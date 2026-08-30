@@ -1,12 +1,18 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": ".",
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true
   },
-  "exclude": ["**/*.spec.ts", "test", "dist", "node_modules", "vitest.config.mts"]
+  "exclude": [
+    "**/*.spec.ts",
+    "test",
+    "node_modules",
+    "vitest.config.mts",
+    "core/**/*.d.ts",
+    "nestjs/**/*.d.ts",
+    "*.d.ts"
+  ]
 }

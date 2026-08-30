@@ -12,6 +12,21 @@ npm install nestjs-api-registry axios axios-retry
 
 `axios`, `axios-retry`, `@nestjs/common`, `@nestjs/core` and `reflect-metadata` are peer dependencies. `axios` and `axios-retry` are peers (rather than regular dependencies) because their types (`AxiosRequestConfig`, `AxiosInstance`, `IAxiosRetryConfig`) are part of this package's public API — installing them yourself keeps a single shared version instead of risking a duplicate axios install alongside your own.
 
+### Import paths
+
+Everything is available from the package root, or from a per-module subpath if you only need one piece (better tree-shaking):
+
+```ts
+// everything
+import { ApiClient, ApiRegistryModule, Api } from "nestjs-api-registry";
+
+// just the plain axios-based client, no NestJS dependency
+import { ApiClient } from "nestjs-api-registry/core";
+
+// just the NestJS module + decorator
+import { ApiRegistryModule, Api } from "nestjs-api-registry/nestjs";
+```
+
 ## Quick start
 
 Register the module once, at the root of your application, with a default client configuration:
@@ -191,12 +206,15 @@ The underlying axios instance is also available directly via `client.axios`.
 
 ```bash
 npm install
-npm test           # run the test suite (vitest)
+npm test           # run the test suite (vitest); also cleans any leftover build output first
 npm run lint        # oxlint
 npm run format       # oxfmt (writes)
 npm run format:check # oxfmt (check only, no writes)
-npm run build        # compile to dist/
+npm run build        # compile .js/.d.ts alongside the .ts sources (core/, nestjs/, index.ts)
+npm run clean        # remove compiled .js/.d.ts output
 ```
+
+`npm run build` emits `.js`/`.d.ts` files next to their `.ts` sources instead of into a separate `dist/` folder, so that the `./core` and `./nestjs` subpath exports resolve directly. These compiled files are git-ignored and only meant to exist transiently for publishing (`npm publish` runs `build` beforehand and `clean` afterward automatically).
 
 ## License
 

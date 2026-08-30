@@ -19,29 +19,38 @@
     "type": "git",
     "url": "git+https://github.com/mariano-tbh/nestjs-api-registry.git"
   },
-  "files": [
-    "dist"
-  ],
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./index.js",
+  "types": "./index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./core": {
+      "types": "./core/index.d.ts",
+      "default": "./core/index.js"
+    },
+    "./nestjs": {
+      "types": "./nestjs/index.d.ts",
+      "default": "./nestjs/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "clean": "rimraf -g \"core/**/*.js\" \"core/**/*.js.map\" \"core/**/*.d.ts\" \"core/**/*.d.ts.map\" \"nestjs/**/*.js\" \"nestjs/**/*.js.map\" \"nestjs/**/*.d.ts\" \"nestjs/**/*.d.ts.map\" \"index.js\" \"index.js.map\" \"index.d.ts\" \"index.d.ts.map\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "pretest": "npm run clean",
     "test": "vitest run",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "prepublishOnly": "npm run lint && npm run format:check && npm test && npm run build"
+    "prepublishOnly": "npm run lint && npm run format:check && npm test && npm run build",
+    "postpublish": "npm run clean"
   },
   "devDependencies": {
     "@nestjs/common": "^12.0.1",
@@ -54,6 +63,7 @@
     "oxfmt": "^0.65.0",
     "oxlint": "^1.80.0",
     "reflect-metadata": "^0.2.2",
+    "rimraf": "^6.0.1",
     "rxjs": "^7.8.2",
     "typescript": "^7.0.2",
     "unplugin-swc": "^1.5.11",

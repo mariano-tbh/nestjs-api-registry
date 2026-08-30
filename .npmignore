@@ -1,0 +1,12 @@
+# Publish compiled .js/.d.ts (colocated with sources), not the .ts sources themselves.
+*.ts
+!*.d.ts
+
+test/
+.github/
+.swcrc
+.oxlintrc.json
+.oxfmtrc.json
+tsconfig.json
+tsconfig.build.json
+vitest.config.mts
