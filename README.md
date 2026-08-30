@@ -10,7 +10,7 @@ A configurable [NestJS](https://nestjs.com/) module for registering and injectin
 npm install nestjs-api-registry axios axios-retry
 ```
 
-`@nestjs/common`, `@nestjs/core` and `reflect-metadata` are peer dependencies — install them if your project doesn't already have them (any NestJS 12 project will).
+`axios`, `axios-retry`, `@nestjs/common`, `@nestjs/core` and `reflect-metadata` are peer dependencies. `axios` and `axios-retry` are peers (rather than regular dependencies) because their types (`AxiosRequestConfig`, `AxiosInstance`, `IAxiosRetryConfig`) are part of this package's public API — installing them yourself keeps a single shared version instead of risking a duplicate axios install alongside your own.
 
 ## Quick start
 
