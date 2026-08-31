@@ -1,28 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { parse as parseYaml } from "yaml";
-import { OpenAPI3 } from "openapi-typescript";
-
-function isUrl(specUrlOrPath: string): boolean {
-  try {
-    return ["http:", "https:"].includes(new URL(specUrlOrPath).protocol);
-  } catch {
-    return false;
-  }
-}
-
-function parseSpecText(text: string, specUrlOrPath: string): unknown {
-  if (specUrlOrPath.endsWith(".yaml") || specUrlOrPath.endsWith(".yml")) {
-    return parseYaml(text);
-  }
-  if (specUrlOrPath.endsWith(".json")) {
-    return JSON.parse(text);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return parseYaml(text);
-  }
-}
+import type { OpenAPI3 } from "openapi-typescript";
+import { isUrl, parseSpecText } from "./spec-location.js";
 
 export async function loadOpenApiDocument(specUrlOrPath: string): Promise<OpenAPI3> {
   const text = isUrl(specUrlOrPath)

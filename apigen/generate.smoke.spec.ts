@@ -25,10 +25,19 @@ const tscBin = join(repoRoot, "node_modules", "typescript", "bin", "tsc");
  */
 async function typeCheck(mode: ApiMode) {
   const operations = extractOperations(sampleDocument);
-  const source = await render({ name: "Sample", mode, document: sampleDocument, operations });
 
   const dir = await mkdtemp(join(repoRoot, ".smoke-"));
   try {
+    const specLocation = join(dir, "spec.json");
+    await writeFile(specLocation, JSON.stringify(sampleDocument), "utf8");
+    const source = await render({
+      name: "Sample",
+      mode,
+      document: sampleDocument,
+      operations,
+      specLocation,
+    });
+
     const clientFile = join(dir, "client.ts");
     await writeFile(clientFile, source, "utf8");
     await writeFile(

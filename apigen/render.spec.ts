@@ -1,11 +1,20 @@
 import type { OpenAPI3 } from "openapi-typescript";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sampleDocument } from "./__fixtures__/sample-openapi.js";
+import { writeTempSpec } from "./__fixtures__/write-temp-spec.js";
 import { extractOperations } from "./extract-operations.js";
 import { render } from "./render.js";
 
 describe("render", () => {
   const operations = extractOperations(sampleDocument);
+  let specLocation: string;
+  let cleanup: () => Promise<void>;
+
+  beforeAll(async () => {
+    ({ file: specLocation, cleanup } = await writeTempSpec(sampleDocument));
+  });
+
+  afterAll(() => cleanup());
 
   it("named mode emits a Symbol token and @Api(TOKEN) injection", async () => {
     const source = await render({
@@ -13,6 +22,7 @@ describe("render", () => {
       mode: "named",
       document: sampleDocument,
       operations,
+      specLocation,
     });
 
     expect(source).toContain('import { Api } from "nestjs-api-registry/nestjs";');
@@ -30,6 +40,7 @@ describe("render", () => {
       mode: "feature",
       document: sampleDocument,
       operations,
+      specLocation,
     });
 
     expect(source).toContain('import { ApiRegistryModule } from "nestjs-api-registry/nestjs";');
@@ -47,6 +58,7 @@ describe("render", () => {
       mode: "feature",
       document: sampleDocument,
       operations,
+      specLocation,
     });
 
     expect(source).toContain("getByStatus: {");
@@ -59,6 +71,7 @@ describe("render", () => {
       mode: "feature",
       document: sampleDocument,
       operations,
+      specLocation,
     });
 
     expect(source).toContain("url: `/pet/${args.petId}`");
@@ -70,6 +83,7 @@ describe("render", () => {
       mode: "feature",
       document: sampleDocument,
       operations,
+      specLocation,
     });
     const getByStatusEntry = source.slice(
       source.indexOf("getByStatus: {"),
@@ -97,6 +111,7 @@ describe("render", () => {
       mode: "feature",
       document: sampleDocument,
       operations,
+      specLocation,
     });
     const getPetByIdEntry = source.slice(
       source.indexOf("getPetById: {"),
@@ -120,6 +135,7 @@ describe("render", () => {
       mode: "feature",
       document: sampleDocument,
       operations,
+      specLocation,
     });
     const addPetMethod = source.slice(
       source.indexOf("readonly addPet"),
@@ -152,9 +168,103 @@ describe("render: path param sanitizing to a reserved arg key", () => {
       },
     };
     const operations = extractOperations(document);
+    const { file: specLocation, cleanup } = await writeTempSpec(document);
 
-    await expect(render({ name: "Sample", mode: "feature", document, operations })).rejects.toThrow(
-      /reserved/,
-    );
+    try {
+      await expect(
+        render({ name: "Sample", mode: "feature", document, operations, specLocation }),
+      ).rejects.toThrow(/reserved/);
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe("render: resolves $ref parameters", () => {
+  const info = { title: "Test", version: "1.0.0" };
+
+  it("resolves an internal $ref parameter and folds it into query/header detection", async () => {
+    const document: OpenAPI3 = {
+      openapi: "3.0.0",
+      info,
+      paths: {
+        "/x": {
+          get: {
+            operationId: "getX",
+            parameters: [{ $ref: "#/components/parameters/PageParam" }],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+      components: {
+        parameters: {
+          PageParam: { name: "page", in: "query", schema: { type: "integer" } },
+        },
+      },
+    };
+    const operations = extractOperations(document);
+    const { file: specLocation, cleanup } = await writeTempSpec(document);
+
+    try {
+      const source = await render({
+        name: "Sample",
+        mode: "feature",
+        document,
+        operations,
+        specLocation,
+      });
+
+      expect(source).toContain('query: NonNullable<operations["getX"]["parameters"]["query"]>;');
+      expect(source).toContain("params: args.query");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("resolves a $ref parameter pointing at an external, relative file", async () => {
+    const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+
+    const dir = await mkdtemp(join(tmpdir(), "apigen-test-ref-"));
+    try {
+      await writeFile(
+        join(dir, "common.json"),
+        JSON.stringify({
+          parameters: { PageParam: { name: "page", in: "query", schema: { type: "integer" } } },
+        }),
+        "utf8",
+      );
+
+      const document: OpenAPI3 = {
+        openapi: "3.0.0",
+        info,
+        paths: {
+          "/x": {
+            get: {
+              operationId: "getX",
+              parameters: [{ $ref: "./common.json#/parameters/PageParam" }],
+              responses: { "200": { description: "ok" } },
+            },
+          },
+        },
+      };
+      const operations = extractOperations(document);
+      const specLocation = join(dir, "spec.json");
+      await writeFile(specLocation, JSON.stringify(document), "utf8");
+
+      const source = await render({
+        name: "Sample",
+        mode: "feature",
+        document,
+        operations,
+        specLocation,
+      });
+
+      expect(source).toContain('query: NonNullable<operations["getX"]["parameters"]["query"]>;');
+      expect(source).toContain("params: args.query");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

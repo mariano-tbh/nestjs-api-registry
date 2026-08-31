@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve as resolvePath } from "node:path";
 import { extractOperations } from "./extract-operations.js";
 import { loadOpenApiDocument } from "./load-spec.js";
 import { render, type ApiMode } from "./render.js";
+import { isUrl } from "./spec-location.js";
 
 export type { ApiMode } from "./render.js";
 export * from "./types/method-types.js";
@@ -24,7 +25,10 @@ export interface GenerateApiClientOptions extends GenerateOptions {
 export async function generateApiClientSource(options: GenerateOptions): Promise<string> {
   const document = await loadOpenApiDocument(options.spec);
   const operations = extractOperations(document);
-  return render({ name: options.name, mode: options.mode, document, operations });
+  // Absolute-ize a local path so relative $refs inside the spec resolve
+  // correctly regardless of the current working directory.
+  const specLocation = isUrl(options.spec) ? options.spec : resolvePath(options.spec);
+  return render({ name: options.name, mode: options.mode, document, operations, specLocation });
 }
 
 /** Generates the client source and writes it to `options.outFile`. */

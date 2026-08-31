@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import openapiTS, {
   astToString,
   type OpenAPI3,
@@ -7,6 +8,8 @@ import openapiTS, {
 import type { OperationInfo } from "./extract-operations.js";
 import { isReferenceObject } from "./open-api-utils.js";
 import { sanitizeIdentifiers, toScreamingSnakeCase } from "./naming.js";
+import { resolveRef } from "./resolve-ref.js";
+import { isUrl } from "./spec-location.js";
 
 export type ApiMode = "named" | "feature";
 
@@ -15,21 +18,64 @@ interface PathParam {
   localName: string;
 }
 
+interface ResolvedOperationParams {
+  pathParams: PathParam[];
+  hasQuery: boolean;
+  hasHeader: boolean;
+}
+
 // Path params are flattened onto the method's args object alongside
 // "query"/"header"/"body" -- these three names are reserved so a path param
 // sanitizing to one of them can't silently shadow it.
 const RESERVED_ARG_KEYS = new Set(["query", "header", "body"]);
 
-function getPathParams(operation: OperationObject, operationId: string): PathParam[] {
-  const params = (operation.parameters ?? []).filter(
-    (parameter): parameter is ParameterObject =>
-      !isReferenceObject(parameter) && parameter.in === "path",
-  );
+/**
+ * Resolves `operation.parameters`, following any `$ref` entries (internal,
+ * relative-file, or absolute URL -- see resolve-ref.ts). A ref that fails to
+ * resolve (network error, bad pointer, ...) is skipped with a warning rather
+ * than failing the whole generation -- that parameter just won't appear on
+ * the generated method, since without resolving it we don't even know its
+ * name or location (path/query/header).
+ */
+async function resolveParameters(
+  operation: OperationObject,
+  operationId: string,
+  rootDocument: OpenAPI3,
+  specLocation: string,
+): Promise<ParameterObject[]> {
+  const raw = operation.parameters ?? [];
+  const resolved: ParameterObject[] = [];
+  for (const entry of raw) {
+    if (!isReferenceObject(entry)) {
+      resolved.push(entry);
+      continue;
+    }
+    try {
+      resolved.push(await resolveRef<ParameterObject>(entry.$ref, rootDocument, specLocation));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `apigen: could not resolve parameter ref "${entry.$ref}" on operation "${operationId}" (${message}); skipping it.`,
+      );
+    }
+  }
+  return resolved;
+}
+
+async function resolveOperationParams(
+  operation: OperationObject,
+  operationId: string,
+  rootDocument: OpenAPI3,
+  specLocation: string,
+): Promise<ResolvedOperationParams> {
+  const params = await resolveParameters(operation, operationId, rootDocument, specLocation);
+
+  const pathRaw = params.filter((parameter) => parameter.in === "path");
   const localNames = sanitizeIdentifiers(
-    params.map((parameter) => parameter.name),
+    pathRaw.map((parameter) => parameter.name),
     `operation "${operationId}" path parameters`,
   );
-  return params.map((parameter) => {
+  const pathParams = pathRaw.map((parameter) => {
     const localName = localNames.get(parameter.name)!;
     if (RESERVED_ARG_KEYS.has(localName)) {
       throw new Error(
@@ -38,12 +84,12 @@ function getPathParams(operation: OperationObject, operationId: string): PathPar
     }
     return { wireName: parameter.name, localName };
   });
-}
 
-function hasParamsIn(operation: OperationObject, location: "query" | "header"): boolean {
-  return (operation.parameters ?? []).some(
-    (parameter) => !isReferenceObject(parameter) && parameter.in === location,
-  );
+  return {
+    pathParams,
+    hasQuery: params.some((parameter) => parameter.in === "query"),
+    hasHeader: params.some((parameter) => parameter.in === "header"),
+  };
 }
 
 function pickSuccessStatus(operation: OperationObject): string | undefined {
@@ -60,24 +106,19 @@ function operationTypeRef(operationId: string): string {
   return `operations[${JSON.stringify(operationId)}]`;
 }
 
-function renderApiEntry(info: OperationInfo): string {
+function renderApiEntry(info: OperationInfo, resolved: ResolvedOperationParams): string {
   const { operation, operationId, localOperationId } = info;
   const ref = operationTypeRef(operationId);
-  const pathParams = getPathParams(operation, operationId);
 
-  const paramsFields = pathParams.map(
+  const paramsFields = resolved.pathParams.map(
     (param) =>
       `${param.localName}: NonNullable<${ref}["parameters"]["path"]>[${JSON.stringify(param.wireName)}]`,
   );
   const paramsType =
     paramsFields.length > 0 ? `{ ${paramsFields.join("; ")} }` : "Record<string, never>";
 
-  const queryType = hasParamsIn(operation, "query")
-    ? `NonNullable<${ref}["parameters"]["query"]>`
-    : "never";
-  const headerType = hasParamsIn(operation, "header")
-    ? `NonNullable<${ref}["parameters"]["header"]>`
-    : "never";
+  const queryType = resolved.hasQuery ? `NonNullable<${ref}["parameters"]["query"]>` : "never";
+  const headerType = resolved.hasHeader ? `NonNullable<${ref}["parameters"]["header"]>` : "never";
   const bodyType = operation.requestBody
     ? `NonNullable<${ref}["requestBody"]> extends { content: { "application/json": infer B } } ? B : unknown`
     : "never";
@@ -98,8 +139,15 @@ function renderApiEntry(info: OperationInfo): string {
   );
 }
 
-function renderApiInterface(name: string, operations: OperationInfo[]): string {
-  return `export interface ${name}Api {\n${operations.map(renderApiEntry).join("\n")}\n}`;
+function renderApiInterface(
+  name: string,
+  operations: OperationInfo[],
+  resolvedByOperationId: Map<string, ResolvedOperationParams>,
+): string {
+  const entries = operations.map((info) =>
+    renderApiEntry(info, resolvedByOperationId.get(info.operationId)!),
+  );
+  return `export interface ${name}Api {\n${entries.join("\n")}\n}`;
 }
 
 function renderPathTemplate(path: string, pathParams: PathParam[]): string {
@@ -110,16 +158,19 @@ function renderPathTemplate(path: string, pathParams: PathParam[]): string {
   return `\`${template}\``;
 }
 
-function renderClientMethod(name: string, info: OperationInfo): string {
-  const { operation, operationId, localOperationId, path, method } = info;
-  const pathParams = getPathParams(operation, operationId);
+function renderClientMethod(
+  name: string,
+  info: OperationInfo,
+  resolved: ResolvedOperationParams,
+): string {
+  const { operation, localOperationId, path, method } = info;
 
   const fields = [
-    `url: ${renderPathTemplate(path, pathParams)}`,
+    `url: ${renderPathTemplate(path, resolved.pathParams)}`,
     `method: ${JSON.stringify(method.toUpperCase())}`,
   ];
-  if (hasParamsIn(operation, "query")) fields.push("params: args.query");
-  if (hasParamsIn(operation, "header")) fields.push("headers: args.header");
+  if (resolved.hasQuery) fields.push("params: args.query");
+  if (resolved.hasHeader) fields.push("headers: args.header");
   if (operation.requestBody) fields.push("data: args.body");
   fields.push("...config");
 
@@ -132,9 +183,15 @@ function renderClientMethod(name: string, info: OperationInfo): string {
   );
 }
 
-function renderNamedClient(name: string, operations: OperationInfo[]): string {
+function renderNamedClient(
+  name: string,
+  operations: OperationInfo[],
+  resolvedByOperationId: Map<string, ResolvedOperationParams>,
+): string {
   const tokenName = `${toScreamingSnakeCase(name)}_CLIENT`;
-  const methods = operations.map((operation) => renderClientMethod(name, operation)).join("\n\n");
+  const methods = operations
+    .map((info) => renderClientMethod(name, info, resolvedByOperationId.get(info.operationId)!))
+    .join("\n\n");
   return (
     `export const ${tokenName} = Symbol(${JSON.stringify(tokenName)});\n\n` +
     `@Injectable()\n` +
@@ -145,8 +202,14 @@ function renderNamedClient(name: string, operations: OperationInfo[]): string {
   );
 }
 
-function renderFeatureClient(name: string, operations: OperationInfo[]): string {
-  const methods = operations.map((operation) => renderClientMethod(name, operation)).join("\n\n");
+function renderFeatureClient(
+  name: string,
+  operations: OperationInfo[],
+  resolvedByOperationId: Map<string, ResolvedOperationParams>,
+): string {
+  const methods = operations
+    .map((info) => renderClientMethod(name, info, resolvedByOperationId.get(info.operationId)!))
+    .join("\n\n");
   return (
     `@Injectable()\n` +
     `export class ${name}Client {\n` +
@@ -194,15 +257,40 @@ export interface RenderOptions {
   mode: ApiMode;
   document: OpenAPI3;
   operations: OperationInfo[];
+  /** Where the spec was loaded from (URL or file path) -- used to resolve relative/external `$ref`s. */
+  specLocation: string;
 }
 
-export async function render({ name, mode, document, operations }: RenderOptions): Promise<string> {
-  const ast = await openapiTS(document);
+export async function render({
+  name,
+  mode,
+  document,
+  operations,
+  specLocation,
+}: RenderOptions): Promise<string> {
+  // Pass openapi-typescript the spec's actual source location (not the
+  // already-parsed `document`) so it loads and resolves external $refs
+  // itself, the same way our own resolveRef resolves them. Passing `cwd` +
+  // the parsed object instead does *not* reliably propagate to its
+  // ref-resolution/bundling step (verified empirically) -- only handing it
+  // the real URL does.
+  const sourceUrl = isUrl(specLocation) ? new URL(specLocation) : pathToFileURL(specLocation);
+  const ast = await openapiTS(sourceUrl);
   const schemaTypes = astToString(ast);
 
-  const apiInterface = renderApiInterface(name, operations);
+  const resolvedByOperationId = new Map<string, ResolvedOperationParams>();
+  for (const info of operations) {
+    resolvedByOperationId.set(
+      info.operationId,
+      await resolveOperationParams(info.operation, info.operationId, document, specLocation),
+    );
+  }
+
+  const apiInterface = renderApiInterface(name, operations, resolvedByOperationId);
   const client =
-    mode === "named" ? renderNamedClient(name, operations) : renderFeatureClient(name, operations);
+    mode === "named"
+      ? renderNamedClient(name, operations, resolvedByOperationId)
+      : renderFeatureClient(name, operations, resolvedByOperationId);
 
   return [
     "// Generated by apigen -- do not edit by hand. Re-run `npx apigen` to regenerate.",
