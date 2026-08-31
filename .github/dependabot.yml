@@ -8,6 +8,11 @@ updates:
       npm-dependencies:
         patterns:
           - "*"
+    ignore:
+      # openapi-typescript pins peerDependencies.typescript to "^5.x" (see
+      # AGENTS.md) — don't suggest a TS major bump until it supports one.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
