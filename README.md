@@ -170,7 +170,7 @@ Options accepted by `defaults`, each `registry` entry, `forFeature()`, and the o
 ```ts
 ApiRegistryModule.forFeature({
   baseURL: "https://api.example.com",
-  timeout: (config) => (config.method?.toUpperCase() === "POST" ? 30_000 : 1_000),
+  timeout: (config) => (config.method?.toUpperCase() === "GET" ? 1_000 : 30_000),
 });
 ```
 
