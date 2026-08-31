@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeIdentifier, sanitizeIdentifiers, toScreamingSnakeCase } from "./naming.js";
+import {
+  sanitizeIdentifier,
+  sanitizeIdentifiers,
+  toKebabCase,
+  toScreamingSnakeCase,
+} from "./naming.js";
 
 describe("sanitizeIdentifier", () => {
   it("passes an already-camelCase identifier through unchanged", () => {
@@ -58,5 +63,27 @@ describe("toScreamingSnakeCase", () => {
 
   it("splits kebab-case", () => {
     expect(toScreamingSnakeCase("pet-store")).toBe("PET_STORE");
+  });
+});
+
+describe("toKebabCase", () => {
+  it("splits PascalCase", () => {
+    expect(toKebabCase("PetStore")).toBe("pet-store");
+  });
+
+  it("splits camelCase", () => {
+    expect(toKebabCase("petStore")).toBe("pet-store");
+  });
+
+  it("splits SCREAMING_SNAKE_CASE", () => {
+    expect(toKebabCase("PET_STORE")).toBe("pet-store");
+  });
+
+  it("passes already-kebab-case input through unchanged", () => {
+    expect(toKebabCase("pet-store")).toBe("pet-store");
+  });
+
+  it("throws when nothing alphanumeric remains", () => {
+    expect(() => toKebabCase("---")).toThrow();
   });
 });

@@ -7,6 +7,8 @@ import { isUrl } from "./spec-location.js";
 
 export type { ApiMode } from "./render.js";
 export * from "./types/method-types.js";
+export { applyTsPathAlias, defaultTsPathAlias, resolveTsPathAlias } from "./ts-path-alias.js";
+export type { ApplyTsPathAliasOptions } from "./ts-path-alias.js";
 
 export interface GenerateOptions {
   /** A URL to a remote OpenAPI 3.x document, or a path to a local one (JSON or YAML). */

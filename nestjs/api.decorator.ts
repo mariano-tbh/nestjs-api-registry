@@ -23,7 +23,7 @@ export function Api(name: ApiName): ParameterDecorator {
     const paramType = parameterTypes[parameterIndex];
 
     if (paramType !== ApiClient) {
-      throw new RuntimeException("Api client is not an instance of HttpService");
+      throw new RuntimeException("Api client is not an instance of ApiClient");
     }
 
     const injectionToken = createApiInjectionToken(name);
