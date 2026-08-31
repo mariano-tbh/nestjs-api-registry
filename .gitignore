@@ -11,6 +11,17 @@ nestjs/**/*.js
 nestjs/**/*.js.map
 nestjs/**/*.d.ts
 nestjs/**/*.d.ts.map
+apigen/**/*.js
+apigen/**/*.js.map
+apigen/**/*.d.ts
+apigen/**/*.d.ts.map
+bin/**/*.js
+bin/**/*.js.map
+bin/**/*.d.ts
+bin/**/*.d.ts.map
+
+# Scratch dir used by apigen's type-check smoke test (normally self-cleaning)
+.smoke-*/
 
 # Logs
 logs

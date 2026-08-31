@@ -8,11 +8,14 @@
   },
   "exclude": [
     "**/*.spec.ts",
+    "apigen/__fixtures__",
     "test",
     "node_modules",
     "vitest.config.mts",
     "core/**/*.d.ts",
     "nestjs/**/*.d.ts",
+    "apigen/**/*.d.ts",
+    "bin/**/*.d.ts",
     "*.d.ts"
   ]
 }

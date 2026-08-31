@@ -25,6 +25,10 @@ import { ApiClient } from "nestjs-api-registry/core";
 
 // just the NestJS module + decorator
 import { ApiRegistryModule, Api } from "nestjs-api-registry/nestjs";
+
+// the OpenAPI client generator's programmatic API + the types generated
+// clients import (see "Generating a client from an OpenAPI spec" below)
+import { generateApiClient, type MethodDefinition } from "nestjs-api-registry/apigen";
 ```
 
 ## Quick start
@@ -201,6 +205,78 @@ client.send<T>({ method: "GET", url: "/users", params: { active: true } });
 ```
 
 The underlying axios instance is also available directly via `client.axios`.
+
+## Generating a client from an OpenAPI spec
+
+`apigen` reads an OpenAPI 3.x document (a URL or a local file, JSON or YAML) and generates a fully-typed, ready-to-use client class — one method per `operationId` — in either of the two shapes above.
+
+```bash
+npx apigen --spec https://petstore3.swagger.io/api/v3/openapi.json --name PetStore --mode named --out src/generated/pet-store.client.ts
+```
+
+- `--spec` — a URL or local path to the OpenAPI document.
+- `--name` — PascalCase base name used to derive `PetStoreApi`, `PetStoreClient`, `PET_STORE_CLIENT` / `PetStoreModule`.
+- `--mode` — `named` (a `@Api(TOKEN)`-injected class, register the token in `ApiRegistryModule.forRoot`'s `registry`) or `feature` (a self-contained `<Name>Module` with `register`/`registerAsync`, wrapping `ApiRegistryModule.forFeature`/`forFeatureAsync`).
+- `--out` — where to write the generated `.ts` file.
+
+The same thing is available programmatically, e.g. to wire into your own build script:
+
+```ts
+import { generateApiClient, generateApiClientSource } from "nestjs-api-registry/apigen";
+
+// writes to outFile
+await generateApiClient({
+  spec: "https://petstore3.swagger.io/api/v3/openapi.json",
+  name: "PetStore",
+  mode: "named",
+  outFile: "src/generated/pet-store.client.ts",
+});
+
+// or just get the source string back
+const source = await generateApiClientSource({
+  spec: "./openapi.yaml",
+  name: "PetStore",
+  mode: "feature",
+});
+```
+
+Named mode:
+
+```ts
+export const PET_STORE_CLIENT = Symbol("PET_STORE_CLIENT");
+
+@Injectable()
+export class PetStoreClient {
+  constructor(@Api(PET_STORE_CLIENT) private readonly apiClient: ApiClient) {}
+
+  readonly getPetById: MethodDefinition<PetStoreApi["getPetById"]> = (args, config) => {
+    return this.apiClient.send<MethodResponse<PetStoreApi["getPetById"]>>({
+      url: `/pet/${args.petId}`,
+      method: "GET",
+      params: {},
+      headers: {},
+      ...config,
+    });
+  };
+  // ...one method per operationId
+}
+```
+
+Feature mode additionally emits a self-contained `PetStoreModule` — importing it registers both the underlying `ApiClient` and `PetStoreClient` itself, so there's nothing else to wire up:
+
+```ts
+@Module({
+  imports: [PetStoreModule.register({ baseURL: "https://petstore3.swagger.io/api/v3" })],
+})
+export class AppModule {}
+```
+
+A few v1 limitations, worth knowing before you rely on generated output:
+
+- Every operation must have an `operationId`; apigen refuses to generate a client from an operation that doesn't.
+- Only `application/json` request bodies and responses are typed; anything else (e.g. `multipart/form-data`) falls back to `unknown` for that field.
+- The response type is the first 2xx status code found (preferring `200`, then `201`, then `204`).
+- Path/query/header param names, and operationIds, are sanitized into valid camelCase identifiers (`get-by-id` → `getById`, `x-api-key` → `xApiKey`); apigen throws if two different names in the same scope would collide once sanitized (e.g. a path param and a query param both ending up named `id`).
 
 ## Development
 

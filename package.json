@@ -19,6 +19,9 @@
     "type": "git",
     "url": "git+https://github.com/mariano-tbh/nestjs-api-registry.git"
   },
+  "bin": {
+    "apigen": "./bin/apigen.js"
+  },
   "type": "module",
   "main": "./index.js",
   "types": "./index.d.ts",
@@ -35,13 +38,17 @@
       "types": "./nestjs/index.d.ts",
       "default": "./nestjs/index.js"
     },
+    "./apigen": {
+      "types": "./apigen/index.d.ts",
+      "default": "./apigen/index.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "clean": "rimraf -g \"core/**/*.js\" \"core/**/*.js.map\" \"core/**/*.d.ts\" \"core/**/*.d.ts.map\" \"nestjs/**/*.js\" \"nestjs/**/*.js.map\" \"nestjs/**/*.d.ts\" \"nestjs/**/*.d.ts.map\" \"index.js\" \"index.js.map\" \"index.d.ts\" \"index.d.ts.map\"",
+    "clean": "rimraf -g \"core/**/*.js\" \"core/**/*.js.map\" \"core/**/*.d.ts\" \"core/**/*.d.ts.map\" \"nestjs/**/*.js\" \"nestjs/**/*.js.map\" \"nestjs/**/*.d.ts\" \"nestjs/**/*.d.ts.map\" \"apigen/**/*.js\" \"apigen/**/*.js.map\" \"apigen/**/*.d.ts\" \"apigen/**/*.d.ts.map\" \"bin/**/*.js\" \"bin/**/*.js.map\" \"bin/**/*.d.ts\" \"bin/**/*.d.ts.map\" \"index.js\" \"index.js.map\" \"index.d.ts\" \"index.d.ts.map\"",
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "pretest": "npm run clean",
     "test": "vitest run",
@@ -63,6 +70,7 @@
     "@nestjs/testing": "^12.0.1",
     "@swc/core": "^1.16.1",
     "@types/node": "^26.4.0",
+    "@types/yargs": "^17.0.35",
     "axios": "^1.20.0",
     "axios-retry": "^4.5.0",
     "oxfmt": "^0.65.0",
