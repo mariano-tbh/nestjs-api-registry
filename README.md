@@ -253,6 +253,27 @@ npx apigen --spec https://petstore3.swagger.io/api/v3/openapi.json --name PetSto
 - `--name` — PascalCase base name used to derive `PetStoreApi`, `PetStoreClient`, `PET_STORE_CLIENT` / `PetStoreModule`.
 - `--mode` — `named` (a `@Api(TOKEN)`-injected class, register the token in `ApiRegistryModule.forRoot`'s `registry`) or `feature` (a self-contained `<Name>Module` with `register`/`registerAsync`, wrapping `ApiRegistryModule.forFeature`/`forFeatureAsync`).
 - `--out` — where to write the generated `.ts` file.
+- `--tspathalias` — optional. Adds a `compilerOptions.paths` alias in `tsconfig.json` pointing at `--out`, so the generated client can be imported like a package (`import { PetStoreClient } from "@pet-store/apigen"`) instead of by relative path. Pass it with no value (or `--tspathalias true`) to autogenerate an alias from `--name` (`PetStore` -> `@pet-store/apigen`), or pass an explicit alias string, e.g. `--tspathalias "@api/pet-store"`.
+- `--tsconfigpath` — optional, defaults to `tsconfig.json` in the current directory. Only used when `--tspathalias` is set; points at the tsconfig to update.
+
+```bash
+npx apigen --spec https://petstore3.swagger.io/api/v3/openapi.json --name PetStore --mode named --out lib/generated/pet-store.client.ts --tspathalias "@api/pet-store" --tsconfigpath tsconfig.json
+```
+
+generates:
+
+```jsonc
+// tsconfig.json
+{
+  "compilerOptions": {
+    "paths": {
+      "@api/pet-store": ["./lib/generated/pet-store.client.ts"],
+    },
+  },
+}
+```
+
+Existing formatting and comments in `tsconfig.json` are preserved — only the touched `paths` entry changes. Re-running apigen for the same `--name` with a different `--tspathalias` replaces the previous alias entry instead of leaving a stale one behind; this is tracked in a small mapping file kept at `<tsconfig dir>/node_modules/.cache/apigen-path-aliases.json`.
 
 The same thing is available programmatically, e.g. to wire into your own build script:
 
@@ -272,6 +293,15 @@ const source = await generateApiClientSource({
   spec: "./openapi.yaml",
   name: "PetStore",
   mode: "feature",
+});
+
+// update tsconfig.json's paths alias, same behavior as --tspathalias
+import { applyTsPathAlias } from "nestjs-api-registry/apigen";
+
+await applyTsPathAlias({
+  name: "PetStore",
+  outFile: "lib/generated/pet-store.client.ts",
+  tspathalias: true, // or an explicit alias string, e.g. "@api/pet-store"
 });
 ```
 

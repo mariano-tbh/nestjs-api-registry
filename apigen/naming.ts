@@ -33,6 +33,21 @@ export function toScreamingSnakeCase(input: string): string {
 }
 
 /**
+ * "PetStore" / "pet_store" / "PET_STORE" -> "pet-store". Used to derive the
+ * default ts path alias from an API client name.
+ */
+export function toKebabCase(input: string): string {
+  const withBoundaries = input
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[^a-zA-Z0-9]+/g, "-");
+  const words = withBoundaries.split("-").filter(Boolean);
+  if (words.length === 0) {
+    throw new Error(`Cannot derive a valid identifier from "${input}"`);
+  }
+  return words.map((word) => word.toLowerCase()).join("-");
+}
+
+/**
  * Applies `sanitizeIdentifier` across a list of raw names, throwing a clear
  * error if two different raw names collide on the same sanitized identifier.
  */
