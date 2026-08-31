@@ -276,7 +276,7 @@ A few v1 limitations, worth knowing before you rely on generated output:
 - Every operation must have an `operationId`; apigen refuses to generate a client from an operation that doesn't.
 - Only `application/json` request bodies and responses are typed; anything else (e.g. `multipart/form-data`) falls back to `unknown` for that field.
 - The response type is the first 2xx status code found (preferring `200`, then `201`, then `204`).
-- Path/query/header param names, and operationIds, are sanitized into valid camelCase identifiers (`get-by-id` → `getById`, `x-api-key` → `xApiKey`); apigen throws if two different names in the same scope would collide once sanitized (e.g. a path param and a query param both ending up named `id`).
+- Path/query/header param names, and operationIds, are sanitized into valid camelCase identifiers (`get-by-id` → `getById`, `x-api-key` → `xApiKey`). Path/query/header params all land on one flat, merged params object on the generated method, so apigen throws if two _different_ param names would collide once sanitized (e.g. a path param `user-id` and a query param `userId`). The same param name repeated across locations — e.g. an `api-version` sent as both a query param and a header — is not a collision: it's exposed once and the generated method sends that one value to every location it's declared in.
 
 ## Development
 

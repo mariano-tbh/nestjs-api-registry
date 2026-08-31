@@ -55,22 +55,42 @@ describe("extractOperations", () => {
     ).toThrow(/collide/i);
   });
 
-  it("throws when a path param and a query param collide once merged", () => {
+  it("throws when two different param names collide once merged", () => {
     expect(() =>
       extractOperations({
         openapi: "3.0.0",
         paths: {
-          "/a/{id}": {
+          "/a/{user-id}": {
             get: {
               operationId: "op",
               parameters: [
-                { name: "id", in: "path", required: true },
-                { name: "id", in: "query", required: false },
+                { name: "user-id", in: "path", required: true },
+                { name: "userId", in: "query", required: false },
               ],
             },
           },
         },
       }),
     ).toThrow(/merged into a single params object/);
+  });
+
+  it("does not throw when the exact same param name repeats across locations", () => {
+    const [op] = extractOperations({
+      openapi: "3.0.0",
+      paths: {
+        "/a": {
+          get: {
+            operationId: "op",
+            parameters: [
+              { name: "api-version", in: "query", required: false },
+              { name: "api-version", in: "header", required: false },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(op!.queryParams).toEqual([{ wireName: "api-version", localName: "apiVersion" }]);
+    expect(op!.headerParams).toEqual([{ wireName: "api-version", localName: "apiVersion" }]);
   });
 });

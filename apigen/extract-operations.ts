@@ -43,9 +43,13 @@ function toOperationParams(
 /**
  * Walks an OpenAPI document's `paths` into a flat, order-stable list of
  * operations. Throws if an operation has no `operationId`, if two
- * operationIds sanitize to the same identifier, or if two parameters within
- * the same operation and location (path/query/header) sanitize to the same
- * local name.
+ * operationIds sanitize to the same identifier, or if two *different*
+ * parameter names within the same operation sanitize to the same local name
+ * (e.g. a path param "user-id" and a query param "userId" would both become
+ * "userId"). A parameter with the exact same wire name repeated across
+ * locations (e.g. "api-version" sent as both a query param and a header) is
+ * *not* a collision -- it's exposed once on the merged params object and the
+ * generated method sends that one value to every location it appears in.
  */
 export function extractOperations(document: OpenApiDocument): Operation[] {
   const rawEntries: { path: string; method: HttpMethod; operationId: string }[] = [];
@@ -77,13 +81,14 @@ export function extractOperations(document: OpenApiDocument): Operation[] {
     const headerParams = toOperationParams(parameters, "header", context);
 
     // Path/query/header params all end up merged into one flat params object
-    // on the generated method, so a collision across locations (e.g. a path
-    // param and a query param both named "id") is just as unsafe as one
-    // within a single location.
+    // on the generated method. Two *different* wire names landing on the
+    // same local name is unsafe (one would silently shadow the other) and
+    // throws. The same wire name repeated across locations is fine -- it's
+    // one shared value, exposed once, sent everywhere it's declared.
     const seenLocalNames = new Map<string, string>();
     for (const param of [...pathParams, ...queryParams, ...headerParams]) {
       const previousWireName = seenLocalNames.get(param.localName);
-      if (previousWireName !== undefined) {
+      if (previousWireName !== undefined && previousWireName !== param.wireName) {
         throw new Error(
           `${context}: parameters "${previousWireName}" and "${param.wireName}" both sanitize to "${param.localName}" once merged into a single params object`,
         );

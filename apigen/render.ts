@@ -33,11 +33,21 @@ function renderParamsType(operation: Operation): string {
     [operation.queryParams, "query"],
     [operation.headerParams, "header"],
   ];
+  // A param repeated across locations (e.g. "api-version" as both a query
+  // param and a header) is one shared value on the merged params object, so
+  // it only gets one field here -- whichever location is encountered first.
+  const seenLocalNames = new Set<string>();
   const fields = locations.flatMap(([params, location]) =>
-    params.map(
-      (param) =>
-        `${param.localName}: NonNullable<${operationTypeRef(operation.operationId)}["parameters"]["${location}"]>[${JSON.stringify(param.wireName)}]`,
-    ),
+    params
+      .filter((param) => {
+        if (seenLocalNames.has(param.localName)) return false;
+        seenLocalNames.add(param.localName);
+        return true;
+      })
+      .map(
+        (param) =>
+          `${param.localName}: NonNullable<${operationTypeRef(operation.operationId)}["parameters"]["${location}"]>[${JSON.stringify(param.wireName)}]`,
+      ),
   );
   return `{ ${fields.join("; ")} }`;
 }
