@@ -12,25 +12,6 @@ npm install nestjs-api-registry axios axios-retry
 
 `axios`, `axios-retry`, `@nestjs/common`, `@nestjs/core` and `reflect-metadata` are peer dependencies. `axios` and `axios-retry` are peers (rather than regular dependencies) because their types (`AxiosRequestConfig`, `AxiosInstance`, `IAxiosRetryConfig`) are part of this package's public API — installing them yourself keeps a single shared version instead of risking a duplicate axios install alongside your own.
 
-### Import paths
-
-Everything is available from the package root, or from a per-module subpath if you only need one piece (better tree-shaking):
-
-```ts
-// everything
-import { ApiClient, ApiRegistryModule, Api } from "nestjs-api-registry";
-
-// just the plain axios-based client, no NestJS dependency
-import { ApiClient } from "nestjs-api-registry/core";
-
-// just the NestJS module + decorator
-import { ApiRegistryModule, Api } from "nestjs-api-registry/nestjs";
-
-// the OpenAPI client generator's programmatic API + the types generated
-// clients import (see "Generating a client from an OpenAPI spec" below)
-import { generateApiClient, type MethodDefinition } from "nestjs-api-registry/apigen";
-```
-
 ## Quick start
 
 Register the module once, at the root of your application, with a default client configuration:
@@ -184,6 +165,60 @@ Options accepted by `defaults`, each `registry` entry, `forFeature()`, and the o
 | `retryStrategy` | `IAxiosRetryConfig` (from [`axios-retry`](https://www.npmjs.com/package/axios-retry)) | Enables automatic retries.                                                  |
 | `setupInstance` | `(instance: AxiosInstance) => void`                                                   | Escape hatch to further configure the underlying axios instance directly.   |
 
+**`timeout`** — a single number applies to every request; pass a function to vary it per-request (e.g. a longer timeout for writes than reads):
+
+```ts
+ApiRegistryModule.forFeature({
+  baseURL: "https://api.example.com",
+  timeout: (config) => (config.method?.toUpperCase() === "POST" ? 30_000 : 1_000),
+});
+```
+
+**`authStrategy`** — an `AuthStrategy` is `(request: InternalAxiosRequestConfig) => void | Promise<void>`, run as a request interceptor before every request. Mutate the request to attach credentials:
+
+```ts
+import type { AuthStrategy } from "nestjs-api-registry";
+
+const bearerAuth: AuthStrategy = async (request) => {
+  const token = await getAccessToken(); // however you obtain/refresh it
+  request.headers.set("Authorization", `Bearer ${token}`);
+};
+
+ApiRegistryModule.forFeature({
+  baseURL: "https://api.example.com",
+  authStrategy: bearerAuth,
+});
+```
+
+**`retryStrategy`** — passed straight through to [`axios-retry`](https://github.com/softonic/axios-retry#axios-retry); see its README for the full set of options (`retries`, `retryDelay`, `retryCondition`, etc.):
+
+```ts
+import axiosRetry from "axios-retry";
+
+ApiRegistryModule.forFeature({
+  baseURL: "https://api.example.com",
+  retryStrategy: { retries: 3, retryDelay: axiosRetry.exponentialDelay },
+});
+```
+
+**`setupInstance`** — an escape hatch to reach the real `AxiosInstance` for anything not covered by the options above, e.g. logging every request/response:
+
+```ts
+ApiRegistryModule.forFeature({
+  baseURL: "https://api.example.com",
+  setupInstance(instance) {
+    instance.interceptors.request.use((config) => {
+      console.log(`-> ${config.method?.toUpperCase()} ${config.url}`);
+      return config;
+    });
+    instance.interceptors.response.use((response) => {
+      console.log(`<- ${response.status} ${response.config.url}`);
+      return response;
+    });
+  },
+});
+```
+
 ## `ApiClient` methods
 
 `ApiClient` wraps an axios instance and exposes the usual HTTP verbs, each resolving directly to `response.data`:
@@ -256,6 +291,7 @@ client.addPet({
 Named mode:
 
 ```ts
+// src/generated/pet-store.client.ts
 export const PET_STORE_CLIENT = Symbol("PET_STORE_CLIENT");
 
 @Injectable()
@@ -271,16 +307,48 @@ export class PetStoreClient {
   };
   // ...one method per operationId
 }
+
+// src/app.module.ts
+@Module({
+  imports: [
+    ApiGatewayModule.forRoot({
+      registry: {
+        [PET_STORE_CLIENT]: {
+          baseURL: "https://petstore.com/api/v3",
+        },
+      },
+    }),
+  ],
+  providers: [PetStoreClient],
+})
+export class AppModule {}
 ```
 
 Feature mode additionally emits a self-contained `PetStoreModule` — importing it registers both the underlying `ApiClient` and `PetStoreClient` itself, so there's nothing else to wire up:
 
 ```ts
+// src/generated/pet-store.client.ts
+@Injectable()
+export class PetStoreClient {
+  constructor(private readonly apiClient: ApiClient) {} // no decorator here
+
+  readonly getPetById: MethodDefinition<PetStoreApi["getPetById"]> = (args, config) => {
+    // ... same generated methods
+  };
+}
+// then register the generated module:
 @Module({
-  imports: [PetStoreModule.register({ baseURL: "https://petstore3.swagger.io/api/v3" })],
+  imports: [PetStoreModule.register({ baseURL: "https://petstore.com/api/v3" })],
 })
 export class AppModule {}
 ```
+
+### Named/FeatureModule - Which one to choose?
+
+Honestly both work but I would:
+
+- Pick named generation for smaller apps where your app module orchestrates de entire DI container (i.e.: all of your providers are hooked up in the AppModule). Or simply if you prefer to keep your Api Clients configured in a single registry at the root of your application for easy access
+- Pick feature modules for larger apps / monoliths where you mantain different feature based modules and you want to keep them as encapsulated as possible, keeping your AppModule as high-level and minimalistic as possible.
 
 A few v1 limitations, worth knowing before you rely on generated output:
 
@@ -288,7 +356,6 @@ A few v1 limitations, worth knowing before you rely on generated output:
 - Only `application/json` request bodies and responses are typed; anything else (e.g. `multipart/form-data`) falls back to `unknown` for that field.
 - The response type is the first 2xx status code found (preferring `200`, then `201`, then `204`).
 - Path param names and operationIds are sanitized into valid camelCase identifiers (`get-by-id` → `getById`). Query and header param names are **not** renamed — they keep their original spec name as the key on `args.query`/`args.header`, since those two are always their own nested object rather than sharing a namespace with anything else (destructure the ones that are valid identifiers as-is, use bracket notation for the rest, e.g. `args.header["x-api-key"]`).
-- Since path params are flattened onto the same object as `body`/`query`/`header`, apigen throws if a path param sanitizes to one of those three reserved names.
 - `$ref`'d parameter objects are resolved — internal (`#/components/parameters/Foo`), a relative or absolute local file, or an absolute `http(s)://` URL, each optionally followed by a `#/...` fragment. If apigen's own resolution of one fails for some reason (network hiccup, a resolution edge case it doesn't handle, ...) it warns and skips that one parameter rather than failing the whole generation — without resolving it, its name and location (path/query/header) aren't known, so there's nothing to safely attach it to on the generated method. Note this safety net only covers apigen's _own_ resolution: schema generation is openapi-typescript's job, and it resolves the same refs itself — if a ref is genuinely dangling or unreachable, generation still fails outright, since there'd be no valid types to generate regardless of what apigen does with the parameter metadata. `$ref`'d path items (a whole path pointing at a shared `PathItemObject`) are not resolved and are skipped — a rarer OpenAPI 3.1 feature.
 
 ## Development
@@ -304,6 +371,25 @@ npm run clean        # remove compiled .js/.d.ts output
 ```
 
 `npm run build` emits `.js`/`.d.ts` files next to their `.ts` sources instead of into a separate `dist/` folder, so that the `./core` and `./nestjs` subpath exports resolve directly. These compiled files are git-ignored and only meant to exist transiently for publishing (`npm publish` runs `build` beforehand and `clean` afterward automatically).
+
+### Import paths
+
+Everything is available from the package root, or from a per-module subpath if you only need one piece (better tree-shaking):
+
+```ts
+// everything
+import { ApiClient, ApiRegistryModule, Api } from "nestjs-api-registry";
+
+// just the plain axios-based client, no NestJS dependency
+import { ApiClient } from "nestjs-api-registry/core";
+
+// just the NestJS module + decorator
+import { ApiRegistryModule, Api } from "nestjs-api-registry/nestjs";
+
+// the OpenAPI client generator's programmatic API + the types generated
+// clients import (see "Generating a client from an OpenAPI spec" below)
+import { generateApiClient, type MethodDefinition } from "nestjs-api-registry/apigen";
+```
 
 ## License
 
