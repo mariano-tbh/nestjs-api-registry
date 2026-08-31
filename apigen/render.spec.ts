@@ -1,7 +1,7 @@
+import type { OpenAPI3 } from "openapi-typescript";
 import { describe, expect, it } from "vitest";
 import { sampleDocument } from "./__fixtures__/sample-openapi.js";
 import { extractOperations } from "./extract-operations.js";
-import type { OpenApiDocument } from "./load-spec.js";
 import { render } from "./render.js";
 
 describe("render", () => {
@@ -64,16 +64,54 @@ describe("render", () => {
     expect(source).toContain("url: `/pet/${args.petId}`");
   });
 
-  it("routes query and header params to their own request fields, using the original wire name", async () => {
+  it("groups query and header params under their own args field, referencing openapi-typescript's type directly", async () => {
     const source = await render({
       name: "Sample",
       mode: "feature",
       document: sampleDocument,
       operations,
     });
+    const getByStatusEntry = source.slice(
+      source.indexOf("getByStatus: {"),
+      source.indexOf("body: never;", source.indexOf("getByStatus: {")),
+    );
 
-    expect(source).toContain('params: { "status": args.status }');
-    expect(source).toContain('headers: { "x-api-key": args.xApiKey }');
+    expect(getByStatusEntry).toContain(
+      'query: NonNullable<operations["get-by-status"]["parameters"]["query"]>;',
+    );
+    expect(getByStatusEntry).toContain(
+      'header: NonNullable<operations["get-by-status"]["parameters"]["header"]>;',
+    );
+
+    const getByStatusMethod = source.slice(
+      source.indexOf("readonly getByStatus"),
+      source.indexOf("}", source.indexOf("readonly getByStatus")),
+    );
+    expect(getByStatusMethod).toContain("params: args.query");
+    expect(getByStatusMethod).toContain("headers: args.header");
+  });
+
+  it("sets query/header to `never` for operations that don't have them", async () => {
+    const source = await render({
+      name: "Sample",
+      mode: "feature",
+      document: sampleDocument,
+      operations,
+    });
+    const getPetByIdEntry = source.slice(
+      source.indexOf("getPetById: {"),
+      source.indexOf("response:", source.indexOf("getPetById: {")),
+    );
+
+    expect(getPetByIdEntry).toContain("query: never;");
+    expect(getPetByIdEntry).toContain("header: never;");
+
+    const getPetByIdMethod = source.slice(
+      source.indexOf("readonly getPetById"),
+      source.indexOf("}", source.indexOf("readonly getPetById")),
+    );
+    expect(getPetByIdMethod).not.toContain("params: args.query");
+    expect(getPetByIdMethod).not.toContain("headers: args.header");
   });
 
   it("only attaches a body field for operations with a request body", async () => {
@@ -97,35 +135,26 @@ describe("render", () => {
   });
 });
 
-describe("render: a param shared across locations (e.g. a version sent as both query and header)", () => {
-  const sharedParamDocument = {
-    openapi: "3.0.0",
-    paths: {
-      "/x": {
-        get: {
-          operationId: "getX",
-          parameters: [
-            { name: "api-version", in: "query", required: false },
-            { name: "api-version", in: "header", required: false },
-          ],
+describe("render: path param sanitizing to a reserved arg key", () => {
+  const info = { title: "Test", version: "1.0.0" };
+
+  it('throws when a path param sanitizes to "body", "query", or "header"', async () => {
+    const document: OpenAPI3 = {
+      openapi: "3.0.0",
+      info,
+      paths: {
+        "/x/{body}": {
+          get: {
+            operationId: "getX",
+            parameters: [{ name: "body", in: "path", required: true }],
+          },
         },
       },
-    },
-  } satisfies OpenApiDocument;
+    };
+    const operations = extractOperations(document);
 
-  it("exposes the shared param once on the params object, and sends it to every location", async () => {
-    const operations = extractOperations(sharedParamDocument);
-    const source = await render({
-      name: "Sample",
-      mode: "feature",
-      document: sharedParamDocument,
-      operations,
-    });
-
-    // one field in the generated <Name>Api params type, not two
-    expect(source.match(/apiVersion:/g)?.length).toBe(1);
-    // but sent to both the query string and the header, from that one value
-    expect(source).toContain('params: { "api-version": args.apiVersion }');
-    expect(source).toContain('headers: { "api-version": args.apiVersion }');
+    await expect(render({ name: "Sample", mode: "feature", document, operations })).rejects.toThrow(
+      /reserved/,
+    );
   });
 });

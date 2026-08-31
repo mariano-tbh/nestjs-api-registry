@@ -1,43 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
-
-/**
- * Minimal shape of an OpenAPI 3.x document -- only what extract-operations.ts
- * and render.ts actually need to walk. Schema *shapes* are never touched
- * here; those are handled entirely by openapi-typescript in render.ts.
- */
-export interface OpenApiParameter {
-  name: string;
-  in: "path" | "query" | "header" | "cookie";
-  required?: boolean;
-  // Real specs carry a lot more (schema, description, style, ...) that we
-  // never read here -- schema conversion is entirely openapi-typescript's job.
-  [key: string]: unknown;
-}
-
-export interface OpenApiOperation {
-  operationId?: string;
-  parameters?: OpenApiParameter[];
-  requestBody?: unknown;
-  responses?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-export type OpenApiPathItem = Partial<
-  Record<
-    "get" | "put" | "post" | "delete" | "options" | "head" | "patch" | "trace",
-    OpenApiOperation
-  >
->;
-
-export interface OpenApiDocument {
-  openapi: string;
-  paths: Record<string, OpenApiPathItem>;
-  // info, components, servers, etc. are all real, commonly-present fields we
-  // don't need to read ourselves -- openapi-typescript gets the whole raw
-  // object regardless of this type.
-  [key: string]: unknown;
-}
+import { OpenAPI3 } from "openapi-typescript";
 
 function isUrl(specUrlOrPath: string): boolean {
   try {
@@ -61,7 +24,7 @@ function parseSpecText(text: string, specUrlOrPath: string): unknown {
   }
 }
 
-export async function loadOpenApiDocument(specUrlOrPath: string): Promise<OpenApiDocument> {
+export async function loadOpenApiDocument(specUrlOrPath: string): Promise<OpenAPI3> {
   const text = isUrl(specUrlOrPath)
     ? await fetch(specUrlOrPath).then((res) => {
         if (!res.ok) {
@@ -73,7 +36,7 @@ export async function loadOpenApiDocument(specUrlOrPath: string): Promise<OpenAp
       })
     : await readFile(specUrlOrPath, "utf8");
 
-  const document = parseSpecText(text, specUrlOrPath) as OpenApiDocument;
+  const document = parseSpecText(text, specUrlOrPath) as OpenAPI3;
 
   if (!document.openapi || !document.openapi.startsWith("3.")) {
     throw new Error(

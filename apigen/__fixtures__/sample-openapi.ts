@@ -1,4 +1,4 @@
-import type { OpenApiDocument } from "../load-spec.js";
+import type { OpenAPI3 } from "openapi-typescript";
 
 /**
  * A small, hand-written OpenAPI 3.0 document covering: a path param
@@ -66,4 +66,4 @@ export const sampleDocument = {
       },
     },
   },
-} satisfies OpenApiDocument;
+} satisfies OpenAPI3;

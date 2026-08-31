@@ -240,6 +240,19 @@ const source = await generateApiClientSource({
 });
 ```
 
+Generated methods group their arguments by location — path params flattened directly onto the object, `body`/`query`/`header` each their own nested field (only present when the operation actually has one):
+
+```ts
+client.updatePetWithForm({
+  petId: 1, // path param, flat
+  query: { name: "Rex", status: "available" }, // query params, grouped
+});
+
+client.addPet({
+  body: { name: "Rex", photoUrls: [] }, // JSON request body
+});
+```
+
 Named mode:
 
 ```ts
@@ -253,8 +266,6 @@ export class PetStoreClient {
     return this.apiClient.send<MethodResponse<PetStoreApi["getPetById"]>>({
       url: `/pet/${args.petId}`,
       method: "GET",
-      params: {},
-      headers: {},
       ...config,
     });
   };
@@ -276,7 +287,9 @@ A few v1 limitations, worth knowing before you rely on generated output:
 - Every operation must have an `operationId`; apigen refuses to generate a client from an operation that doesn't.
 - Only `application/json` request bodies and responses are typed; anything else (e.g. `multipart/form-data`) falls back to `unknown` for that field.
 - The response type is the first 2xx status code found (preferring `200`, then `201`, then `204`).
-- Path/query/header param names, and operationIds, are sanitized into valid camelCase identifiers (`get-by-id` → `getById`, `x-api-key` → `xApiKey`). Path/query/header params all land on one flat, merged params object on the generated method, so apigen throws if two _different_ param names would collide once sanitized (e.g. a path param `user-id` and a query param `userId`). The same param name repeated across locations — e.g. an `api-version` sent as both a query param and a header — is not a collision: it's exposed once and the generated method sends that one value to every location it's declared in.
+- Path param names and operationIds are sanitized into valid camelCase identifiers (`get-by-id` → `getById`). Query and header param names are **not** renamed — they keep their original spec name as the key on `args.query`/`args.header`, since those two are always their own nested object rather than sharing a namespace with anything else (destructure the ones that are valid identifiers as-is, use bracket notation for the rest, e.g. `args.header["x-api-key"]`).
+- Since path params are flattened onto the same object as `body`/`query`/`header`, apigen throws if a path param sanitizes to one of those three reserved names.
+- `$ref`'d path items and parameter objects are not resolved in v1 and are skipped.
 
 ## Development
 

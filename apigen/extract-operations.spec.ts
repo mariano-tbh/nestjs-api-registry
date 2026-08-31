@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { sampleDocument } from "./__fixtures__/sample-openapi.js";
 import { extractOperations } from "./extract-operations.js";
 
+const info = { title: "Test", version: "1.0.0" };
+
 describe("extractOperations", () => {
   const operations = extractOperations(sampleDocument);
 
@@ -18,26 +20,18 @@ describe("extractOperations", () => {
     expect(op.localOperationId).toBe("getByStatus");
   });
 
-  it("classifies path/query/header params by location", () => {
-    const getPetById = operations.find((o) => o.operationId === "getPetById")!;
-    expect(getPetById.pathParams).toEqual([{ wireName: "petId", localName: "petId" }]);
-    expect(getPetById.queryParams).toEqual([]);
-    expect(getPetById.headerParams).toEqual([]);
-
-    const getByStatus = operations.find((o) => o.operationId === "get-by-status")!;
-    expect(getByStatus.queryParams).toEqual([{ wireName: "status", localName: "status" }]);
-    expect(getByStatus.headerParams).toEqual([{ wireName: "x-api-key", localName: "xApiKey" }]);
-  });
-
-  it("sets hasRequestBody based on the presence of requestBody", () => {
-    expect(operations.find((o) => o.operationId === "getPetById")!.hasRequestBody).toBe(false);
-    expect(operations.find((o) => o.operationId === "addPet")!.hasRequestBody).toBe(true);
+  it("carries the path, method and raw operation object through", () => {
+    const op = operations.find((o) => o.operationId === "addPet")!;
+    expect(op.path).toBe("/pet");
+    expect(op.method).toBe("post");
+    expect(op.operation.operationId).toBe("addPet");
   });
 
   it("throws when an operation has no operationId", () => {
     expect(() =>
       extractOperations({
         openapi: "3.0.0",
+        info,
         paths: { "/x": { get: {} } },
       }),
     ).toThrow(/operationId/);
@@ -47,50 +41,12 @@ describe("extractOperations", () => {
     expect(() =>
       extractOperations({
         openapi: "3.0.0",
+        info,
         paths: {
           "/a": { get: { operationId: "get-by-id" } },
           "/b": { get: { operationId: "getById" } },
         },
       }),
     ).toThrow(/collide/i);
-  });
-
-  it("throws when two different param names collide once merged", () => {
-    expect(() =>
-      extractOperations({
-        openapi: "3.0.0",
-        paths: {
-          "/a/{user-id}": {
-            get: {
-              operationId: "op",
-              parameters: [
-                { name: "user-id", in: "path", required: true },
-                { name: "userId", in: "query", required: false },
-              ],
-            },
-          },
-        },
-      }),
-    ).toThrow(/merged into a single params object/);
-  });
-
-  it("does not throw when the exact same param name repeats across locations", () => {
-    const [op] = extractOperations({
-      openapi: "3.0.0",
-      paths: {
-        "/a": {
-          get: {
-            operationId: "op",
-            parameters: [
-              { name: "api-version", in: "query", required: false },
-              { name: "api-version", in: "header", required: false },
-            ],
-          },
-        },
-      },
-    });
-
-    expect(op!.queryParams).toEqual([{ wireName: "api-version", localName: "apiVersion" }]);
-    expect(op!.headerParams).toEqual([{ wireName: "api-version", localName: "apiVersion" }]);
   });
 });
